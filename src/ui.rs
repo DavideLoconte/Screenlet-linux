@@ -6,7 +6,7 @@
 use crate::cable::{self, Cable};
 use crate::link::paired;
 use crate::nearby::{self, Tablet};
-use crate::session::{self, Path, Report, Session};
+use crate::session::{Asker, Path, Report, Session};
 use crate::settings::Settings;
 use crate::sizes;
 use adw::prelude::*;
@@ -28,14 +28,7 @@ const HELP_STATS: &str = "Measured by the tablet with the clocks of both matched
 /// What the threads tell the window.
 enum Event {
     Ask(String, String, Sender<bool>),
-    Paired(Result<String, String>),
-    Cable(Result<Arc<Cable>, String>, Then),
-}
-
-#[derive(Clone, Copy)]
-enum Then {
-    Show,
-    Pair,
+    Cable(Result<Arc<Cable>, String>, bool), // chosen by the user, or only plugged in
 }
 
 struct App {
@@ -127,11 +120,11 @@ fn export(application: &adw::Application, app: &Shared) {
 fn connect_any(app: &Shared) {
     let plugged = app.borrow().plugged;
     if plugged && !paired::all().is_empty() {
-        return over_cable(app, Then::Show);
+        return over_cable(app, false);
     }
     let found = app.borrow().nearby.lock().unwrap().values().find(|t| paired::by_id(&t.id).is_some()).cloned();
     match found {
-        Some(t) => show(app, Path::Network(t.address, Some(t.id.clone())), t.name),
+        Some(t) => show(app, Path::Network(t.address, Some(t.id.clone())), t.name, false),
         None => app.borrow().window.present(),
     }
 }
@@ -373,22 +366,19 @@ fn actions(app: &Shared) -> Vec<Action> {
             if by_wifi {
                 let path = Path::Network(t.address, Some(t.id.clone()));
                 let name = t.name.clone();
-                found.push(Action { device: t.name, detail: "Wi-Fi", label: "Show the desktop", primary: true,
-                                    run: Box::new(move |app| show(app, path.clone(), name.clone())) });
+                found.push(Action { device: t.name, detail: "Wi-Fi", label: "Connect", primary: true,
+                                    run: Box::new(move |app| show(app, path.clone(), name.clone(), true)) });
             }
-        } else if a.settings.connection != "cable" {
+        } else if by_wifi {
             let path = Path::Network(t.address, None);
-            found.push(Action { device: t.name, detail: "Wi-Fi", label: "Pair…", primary: false,
-                                run: Box::new(move |app| pair(app, path.clone())) });
+            let name = t.name.clone();
+            found.push(Action { device: t.name, detail: "Wi-Fi", label: "Connect", primary: true,
+                                run: Box::new(move |app| show(app, path.clone(), name.clone(), true)) });
         }
     }
     if by_cable {
-        if !paired.is_empty() {
-            found.push(Action { device: "Tablet on the cable".into(), detail: "USB-C cable", label: "Show the desktop", primary: true,
-                                run: Box::new(|app| over_cable(app, Then::Show)) });
-        }
-        found.push(Action { device: "Tablet on the cable".into(), detail: "USB-C cable", label: "Pair…", primary: paired.is_empty(),
-                            run: Box::new(|app| over_cable(app, Then::Pair)) });
+        found.push(Action { device: "Tablet on the cable".into(), detail: "USB-C cable", label: "Connect", primary: true,
+                            run: Box::new(|app| over_cable(app, true)) });
     }
     // A paired tablet nowhere to be seen, whose own Wi-Fi Direct group this PC knows.
     if by_wifi {
@@ -401,7 +391,7 @@ fn actions(app: &Shared) -> Vec<Action> {
             let name = entry["name"].as_str().unwrap_or("tablet").to_string();
             let (ssid, passphrase) = (ssid.to_string(), passphrase.to_string());
             let at = entry["p2p"]["at"].as_str().unwrap_or("192.168.49.1").to_string();
-            found.push(Action { device: name.clone(), detail: "Wi-Fi Direct", label: "Show the desktop", primary: true,
+            found.push(Action { device: name.clone(), detail: "Wi-Fi Direct", label: "Connect", primary: true,
                                 run: Box::new(move |app| direct(app, &ssid, &passphrase, &at, &id, &name)) });
         }
     }
@@ -415,47 +405,38 @@ fn disconnect(app: &Shared) {
     app.borrow().status.set_label("Disconnected");
 }
 
-fn show(app: &Shared, path: Path, name: String) {
+/// chosen: by the user, who may then be asked to pair. Never for a tablet merely plugged in.
+fn show(app: &Shared, path: Path, name: String, chosen: bool) {
+    let ask = chosen.then(|| asker(app));
     let mut a = app.borrow_mut();
     if a.session.is_some() {
         return;
     }
-    let session = Session::start(path, a.settings.session_mode(), false);
+    let session = Session::start(path, a.settings.session_mode(), false, ask);
     a.status.set_label(&format!("Connecting to {name}…"));
     a.session = Some((session, name));
 }
 
-fn pair(app: &Shared, path: Path) {
+/// The window's way of asking: called on the session's thread, the window answers.
+fn asker(app: &Shared) -> Asker {
     let tx = app.borrow().events.0.clone();
-    app.borrow_mut().busy = Some("Pairing…".into());
-    std::thread::spawn(move || {
-        let asker = Mutex::new(tx.clone());
-        let ask = move |name: &str, code: &str| {
-            let (answer, wait) = channel();
-            let _ = asker.lock().unwrap().send(Event::Ask(name.into(), code.into(), answer));
-            wait.recv().unwrap_or(false)
-        };
-        let result = session::pair(&path, &ask).map_err(|e| e.to_string());
-        let _ = tx.send(Event::Paired(result));
-    });
+    Box::new(move |name: &str, code: &str| {
+        let (answer, wait) = channel();
+        let _ = tx.send(Event::Ask(name.into(), code.into(), answer));
+        wait.recv().unwrap_or(false)
+    })
 }
 
-fn over_cable(app: &Shared, then: Then) {
-    if let Some(cable) = app.borrow().cable.clone().filter(|c| c.alive()) {
-        return run_on_cable(app, cable, then);
+fn over_cable(app: &Shared, chosen: bool) {
+    let open = app.borrow().cable.clone().filter(|c| c.alive());
+    if let Some(cable) = open {
+        return show(app, Path::Cable(cable), "the tablet on the cable".into(), chosen);
     }
     let tx = app.borrow().events.0.clone();
     app.borrow_mut().busy = Some("Opening the link over the cable… (allow Screenlet on the tablet)".into());
     std::thread::spawn(move || {
-        let _ = tx.send(Event::Cable(Cable::open().map_err(|e| e.to_string()), then));
+        let _ = tx.send(Event::Cable(Cable::open().map_err(|e| e.to_string()), chosen));
     });
-}
-
-fn run_on_cable(app: &Shared, cable: Arc<Cable>, then: Then) {
-    match then {
-        Then::Show => show(app, Path::Cable(cable), "the tablet on the cable".into()),
-        Then::Pair => pair(app, Path::Cable(cable)),
-    }
 }
 
 /// Joins the tablet's own Wi-Fi Direct group as a Wi-Fi network (NetworkManager), then shows the desktop there.
@@ -465,7 +446,7 @@ fn direct(app: &Shared, ssid: &str, passphrase: &str, at: &str, id: &str, name: 
         .status().map(|s| s.success()).unwrap_or(false);
     let address: Option<SocketAddr> = format!("{at}:{}", crate::protocol::PORT).parse().ok();
     match (joined, address) {
-        (true, Some(address)) => show(app, Path::Network(address, Some(id.into())), name.into()),
+        (true, Some(address)) => show(app, Path::Network(address, Some(id.into())), name.into(), true),
         _ => alert(app, &format!("Could not join {name}'s Wi-Fi Direct network"), "Is Screenlet open on the tablet, with Wi-Fi on?"),
     }
 }
@@ -496,19 +477,12 @@ fn tick(app: &Shared) {
                 });
                 dialog.present(Some(&app.borrow().window));
             }
-            Event::Paired(result) => {
-                app.borrow_mut().busy = None;
-                match result {
-                    Ok(name) => app.borrow().status.set_label(&format!("Paired with {name}")),
-                    Err(e) => alert(app, "Not paired", &e),
-                }
-            }
-            Event::Cable(result, then) => {
+            Event::Cable(result, chosen) => {
                 app.borrow_mut().busy = None;
                 match result {
                     Ok(cable) => {
                         app.borrow_mut().cable = Some(cable.clone());
-                        run_on_cable(app, cable, then);
+                        show(app, Path::Cable(cable), "the tablet on the cable".into(), chosen);
                     }
                     Err(e) => alert(app, "Screenlet could not use the cable", &e),
                 }
@@ -525,7 +499,7 @@ fn tick(app: &Shared) {
             && a.busy.is_none() && !paired::all().is_empty();
         drop(a);
         if start {
-            over_cable(app, Then::Show); // plugged in: the desktop goes to it by itself
+            over_cable(app, false); // plugged in: the desktop goes to it by itself
         }
     }
     // The session.

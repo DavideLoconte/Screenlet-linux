@@ -81,7 +81,7 @@ fn show(args: &[String]) -> link::Result<()> {
     }
     session::STATS_EVERY.store(2, std::sync::atomic::Ordering::Relaxed);
     let path = if args[1] == "--show-cable" { Path::Cable(cable::Cable::open()?) } else { first_paired(Duration::from_secs(10))? };
-    let session = Session::start(path, mode, pattern);
+    let session = Session::start(path, mode, pattern, None);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     while Instant::now() < deadline && !session.ended() {
         std::thread::sleep(Duration::from_millis(100));

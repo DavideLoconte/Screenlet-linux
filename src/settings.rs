@@ -35,7 +35,7 @@ impl Settings {
             mirroring: v["mirroring"].as_bool().unwrap_or(false),
             mirror: s("mirror", ""),
             connection: s("connection", "auto"),
-            auto_start: v["auto_start"].as_bool().unwrap_or(true),
+            auto_start: v["auto_start"].as_bool().unwrap_or(false),
             tablet_screen: v["tablet_screen"].as_array().and_then(|a| Some((a.first()?.as_i64()? as i32, a.get(1)?.as_i64()? as i32))),
         }
     }

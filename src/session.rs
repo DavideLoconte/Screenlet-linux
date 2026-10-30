@@ -108,14 +108,18 @@ pub struct Session {
 
 pub static STATS_EVERY: AtomicU32 = AtomicU32::new(30); // log one report in this many, and any with losses
 
+/// Shows the pairing code, returns the user's answer.
+pub type Asker = Box<dyn Fn(&str, &str) -> bool + Send>;
+
 impl Session {
-    /// pattern: a moving test pattern instead of the desktop (no input).
-    pub fn start(path: Path, mode: Mode, pattern: bool) -> Session {
+    /// pattern: a moving test pattern instead of the desktop (no input). ask: pairs first with
+    /// a tablet not paired yet, asking the user; without it, such a tablet ends the session.
+    pub fn start(path: Path, mode: Mode, pattern: bool, ask: Option<Asker>) -> Session {
         let stop = Arc::new(AtomicBool::new(false));
         let status = Arc::new(Mutex::new(Status { state: "Connecting…".into(), ..Default::default() }));
         let (s, st) = (stop.clone(), status.clone());
         std::thread::Builder::new().name("screenlet-session".into()).spawn(move || {
-            let result = run(&path, mode, pattern, &s, &st);
+            let result = run(&path, mode, pattern, ask, &s, &st);
             s.store(true, Ordering::Relaxed);
             let mut status = st.lock().unwrap();
             status.ended = Some(result.err().map(|e| e.to_string()));
@@ -194,9 +198,10 @@ fn send_many(socket: &UdpSocket, to: &SocketAddr, packets: &[&[u8]]) {
     }
 }
 
-fn run(path: &Path, mut mode: Mode, pattern: bool, stop: &Arc<AtomicBool>, status: &Arc<Mutex<Status>>) -> Result<()> {
+fn run(path: &Path, mut mode: Mode, pattern: bool, ask: Option<Asker>, stop: &Arc<AtomicBool>, status: &Arc<Mutex<Status>>) -> Result<()> {
     let say = |text: String| status.lock().unwrap().state = text;
-    let mut link = Link::open(path.stream()?, path.expect(), None)?;
+    let asking: Option<&dyn Fn(&str, &str) -> bool> = match &ask { Some(a) => Some(&**a), None => None };
+    let mut link = Link::open(path.stream()?, path.expect(), asking)?;
     let tablet = link.name.clone();
     say(format!("Connecting to {tablet}…"));
     let mut key = [0u8; 32];
