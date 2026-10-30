@@ -1,0 +1,7 @@
+{
+  "uuid": "screenlet@davideloconte.github.io",
+  "name": "Screenlet",
+  "description": "Quick Settings toggle for Screenlet: your Android tablet as a second screen, with one click.",
+  "shell-version": ["46", "47", "48", "49", "50", "51"],
+  "url": "https://github.com/DavideLoconte/Screenlet-gnome"
+}

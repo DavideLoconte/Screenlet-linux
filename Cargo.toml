@@ -1,0 +1,23 @@
+[package]
+name = "screenlet"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Your Android tablet as a low-latency second screen for GNOME, with touch and pen"
+repository = "https://github.com/DavideLoconte/Screenlet-gnome"
+
+[profile.release]
+lto = "thin"
+
+[dependencies]
+adw = { version = "0.9.2", package = "libadwaita", features = ["v1_5"] }
+gio = "0.22"
+glib = "0.22"
+gst = { version = "0.25.4", package = "gstreamer" }
+gst_app = { version = "0.25.2", package = "gstreamer-app" }
+gtk = { version = "0.11.5", package = "gtk4", features = ["v4_14"] }
+libc = "0.2.191"
+mdns-sd = "0.21.6"
+openssl = "0.10.81"
+rusb = "0.9.4"
+serde_json = "1.0.154"

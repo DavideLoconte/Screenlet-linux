@@ -1,0 +1,72 @@
+# Every push and pull request is tested and packaged (Fedora's RPM, Ubuntu's
+# DEB), the packages uploaded as the run's artifacts. A v* tag also
+# publishes a release with them and the GNOME Shell extension.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write  # the release, on a tag
+
+jobs:
+  fedora:
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build environment
+        run: |
+          dnf -y install --setopt=install_weak_deps=False cargo rust clippy gcc pkgconf-pkg-config gtk4-devel \
+            libadwaita-devel gstreamer1-devel gstreamer1-plugins-base-devel gstreamer1-plugins-good \
+            gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free pipewire-gstreamer libusb1-devel \
+            openssl-devel rpm-build
+      - name: Test
+        run: cargo test --release --locked
+      - name: Lint
+        run: cargo clippy --release --locked -- -D warnings
+      - name: The tag is the version
+        if: github.ref_type == 'tag'
+        run: '[ "v$(sed -n "s/^version = \"\(.*\)\"/\1/p" Cargo.toml | head -1)" = "$GITHUB_REF_NAME" ]'
+      - name: RPM
+        run: SKIP_BUILD=1 tools/package.sh rpm
+      - uses: actions/upload-artifact@v5
+        with:
+          name: screenlet-rpm
+          path: dist/*.rpm
+
+  ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libusb-1.0-0-dev libssl-dev pkg-config
+      - name: DEB
+        run: tools/package.sh deb
+      - uses: actions/upload-artifact@v5
+        with:
+          name: screenlet-deb
+          path: dist/*.deb
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [fedora, ubuntu]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd data/gnome-shell/screenlet@davideloconte.github.io && zip -q ../../../dist/screenlet@davideloconte.github.io.shell-extension.zip *)
+          gh release create "$GITHUB_REF_NAME" --title "Screenlet for GNOME $GITHUB_REF_NAME" --generate-notes dist/*.rpm dist/*.deb dist/*.zip

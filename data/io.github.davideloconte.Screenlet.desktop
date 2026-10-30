@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Screenlet
+Comment=Your Android tablet as a second screen, with touch and pen
+Comment[it]=Il tablet Android come secondo schermo, con tocco e penna
+Exec=screenlet
+Icon=io.github.davideloconte.Screenlet
+Terminal=false
+Type=Application
+Categories=Utility;GTK;
+Keywords=tablet;second screen;display;monitor;pen;touch;
+DBusActivatable=true
+StartupNotify=true

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.davideloconte.Screenlet.Pen
+Exec=/usr/libexec/screenlet-pen-helper
+User=root

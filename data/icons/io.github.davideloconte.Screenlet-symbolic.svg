@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="#222222" fill-rule="evenodd">
+    <!-- The computer's display, open where the tablet stands in front of it. -->
+    <path d="M2.5 1H10.5A1.5 1.5 0 0 1 12 2.5V6.5H6.5V10H2.5A1.5 1.5 0 0 1 1 8.5V2.5A1.5 1.5 0 0 1 2.5 1Z M2.5 2.5V8.5H6.5V6.5H10.5V2.5Z"/>
+    <path d="M3.25 10H5V12H3.25Z M1.75 12H6.5V13.5H1.75Z"/>
+    <!-- The screenlet. -->
+    <path d="M9.5 8H14.5A1.5 1.5 0 0 1 16 9.5V13.5A1.5 1.5 0 0 1 14.5 15H9.5A1.5 1.5 0 0 1 8 13.5V9.5A1.5 1.5 0 0 1 9.5 8Z M9.5 9.5V13.5H14.5V9.5Z"/>
+  </g>
+</svg>

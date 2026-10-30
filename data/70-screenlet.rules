@@ -1,0 +1,17 @@
+# Screenlet: the tablet on the USB cable, for the user at the PC (uaccess),
+# before and after it becomes Screenlet's accessory (Android Open Accessory).
+SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="2d0[0-5]", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="04e8", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="18d1", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="17ef", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2717", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2a70", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="22b8", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="12d1", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="22d9", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="339b", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1949", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0b05", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0fce", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1bbb", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2b0e", ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Screenlet</vendor>
+  <vendor_url>https://github.com/DavideLoconte/Screenlet-gnome</vendor_url>
+  <action id="io.github.davideloconte.screenlet.pen">
+    <description>Use the tablet's pen as a pen tablet on this PC</description>
+    <message>Screenlet wants to add the tablet's pen as a pen tablet</message>
+    <!-- The session in front of the PC, without a password; nobody else. -->
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+</policyconfig>
