@@ -32,7 +32,7 @@ jobs:
         if: github.ref_type == 'tag'
         run: '[ "v$(sed -n "s/^version = \"\(.*\)\"/\1/p" Cargo.toml | head -1)" = "$GITHUB_REF_NAME" ]'
       - name: RPM
-        run: SKIP_BUILD=1 tools/package.sh rpm
+        run: tools/package.sh rpm
       - uses: actions/upload-artifact@v5
         with:
           name: screenlet-rpm
