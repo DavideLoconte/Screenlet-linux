@@ -110,6 +110,27 @@ framing, sizes and bitrate, touch and pen, and the cost of sealing. CI builds
 the RPM on Fedora and the DEB on Ubuntu. A `v*` tag publishes them in a
 release, with the extension.
 
+## To do
+
+The list of tablets on the cable was written without Linux at hand: CI builds and tests
+it, nothing more. To try here:
+
+- With one tablet: its own name in the window, Connect, Disconnect, and it still works
+  with the desktop shown on plugging in.
+- `screenlet --tablets` lists it by name and serial, with no udev rule needed for that.
+- With two tablets: a line each, with their names, and Connect shows the desktop on the
+  right one; `--show-cable 20 serial=SERIAL` likewise.
+- With two, Connect on the other one after a session: the first goes back to what it
+  was and the second takes over, with one session at a time.
+- With two, nothing starts by itself on plugging in, and the Quick Settings toggle
+  opens the window.
+- Two of the same model show the last digits of their serials.
+- A tablet with MediaTek's USB id, as a Bigme HiBreak Pro: seen, allowed by the udev rule
+  (`70-screenlet.rules`, reinstalled), the cable and the picture. Its decoder needed the
+  companion's fix for its largest size.
+- Whether the bitrate falls to its lowest on such a tablet while the whole picture moves,
+  as on Windows, though the cable has room to spare.
+
 ## License
 
 MIT. Screenlet started as a fork of
