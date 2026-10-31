@@ -1,8 +1,7 @@
 # Screenlet protocol, version 1
 
-Normative spec for the link between a **computer** (Screenlet for macOS;
-Linux and Windows are future work) and the **app** (Screenlet Companion for
-Android). It derives from Plus One's protocol version 3, without its camera,
+Normative spec for the link between a **computer** (Screenlet for macOS,
+GNOME or Windows) and the **app** (Screenlet Companion for Android). It derives from Plus One's protocol version 3, without its camera,
 microphone, speaker and PDF-signing messages. MUST, SHOULD and MAY are used
 as in RFC 2119. All integers are big-endian unless marked `le`. `‖` is
 concatenation. `hex()` is lowercase hex.
@@ -159,6 +158,8 @@ decoder costs more latency than any codec saves.
 After `display-ready` the computer creates a display at the tablet's
 proportions and streams it. The link stays open: the computer pings every
 5 s; `{"type": "stop"}` from the computer or the link closing ends the session.
+`{"type": "show"}` asks a tablet in pause (PING's `shown` is 0) to bring the
+desktop back on screen.
 
 ### 3.1 Packet envelope
 
@@ -262,7 +263,7 @@ USB-C without tethering or developer options. The computer is the USB host.
 
 1. The computer sends AOA control requests 51 (get protocol), 52 (send
    strings), 53 (start) with: manufacturer `Screenlet`, model `Screenlet`,
-   description `Screenlet on the Mac`, version `1`, URI
+   description `Screenlet on the PC` (or the Mac), version `1`, URI
    `https://github.com/DavideLoconte/Screenlet-Companion`.
 2. The tablet re-enumerates as an accessory (Google VID `0x18D1`, PID
    `0x2D00`), asks its user once, and opens the app.

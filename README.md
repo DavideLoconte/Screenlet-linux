@@ -8,9 +8,10 @@ with touch and pen, over a USB-C cable first and Wi-Fi when there is none.</p>
 ---
 
 This is the Linux half of Screenlet. The tablet runs
-[Screenlet Companion](https://github.com/DavideLoconte/Screenlet-companion), and
-[Screenlet for macOS](https://github.com/DavideLoconte/Screenlet-macos) is the
-Mac half. All of them speak the [Screenlet protocol](PROTOCOL.md). Written in
+[Screenlet Companion](https://github.com/DavideLoconte/Screenlet-companion). There is also
+[Screenlet for macOS](https://github.com/DavideLoconte/Screenlet-macos) and
+[Screenlet for Windows](https://github.com/DavideLoconte/Screenlet-windows). They all speak
+the [Screenlet protocol](PROTOCOL.md). Written in
 Rust: GTK 4 and libadwaita, GStreamer, and Mutter's own D-Bus APIs, so no
 screen-sharing dialog appears.
 
@@ -19,11 +20,10 @@ screen-sharing dialog appears.
 1. Install the package and the companion on the tablet.
 2. Plug the tablet in, or have it on the same Wi-Fi, and click **Connect** in
    Screenlet's window. The first time, check that both screens show the same six digits.
-3. In the settings, *Show the desktop when the tablet is plugged in* skips the click
-   for a paired tablet. The
-   **Tablet** toggle in Quick Settings (the GNOME Shell extension, turn it on
-   in *Extensions*) starts and stops it. When closed, the window keeps
-   Screenlet in the background.
+3. The **Tablet** toggle in Quick Settings (the GNOME Shell extension, turn it on
+   in *Extensions*) starts and stops it. When closed, the window keeps Screenlet in
+   the background. Showing the desktop as soon as a paired tablet is plugged in is an
+   option in the settings.
 
 The window has the same settings as Screenlet for macOS: Extend or Mirror (one
 of this PC's monitors), Resolution, Optimize for (lowest latency, balanced,
@@ -113,3 +113,8 @@ release, with the extension.
 
 MIT. Screenlet started as a fork of
 [Plus One](https://github.com/GabrieleSantangelo/PlusOne) by Gabriele Santangelo.
+
+## AI disclosure
+
+Much of this code was written by Claude, Anthropic's AI model, through Claude Code, under
+the author's direction. The author chose what to build and tested it on real hardware.
