@@ -20,6 +20,7 @@ screen-sharing dialog appears.
 1. Install the package and the companion on the tablet.
 2. Plug the tablet in, or have it on the same Wi-Fi, and click **Connect** in
    Screenlet's window. The first time, check that both screens show the same six digits.
+   With two on the cable, each has its own line; one shows the desktop at a time.
 3. The **Tablet** toggle in Quick Settings (the GNOME Shell extension, turn it on
    in *Extensions*) starts and stops it. When closed, the window keeps Screenlet in
    the background. Showing the desktop as soon as a paired tablet is plugged in is an

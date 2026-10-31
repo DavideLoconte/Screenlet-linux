@@ -3,7 +3,7 @@
 //! reaches them, and for those who measure, the advanced settings and the
 //! latency live. As Screenlet for macOS's window.
 
-use crate::cable::{self, Cable};
+use crate::cable::{self, Cable, Plug};
 use crate::link::paired;
 use crate::nearby::{self, Tablet};
 use crate::session::{Asker, Path, Report, Session};
@@ -28,7 +28,7 @@ const HELP_STATS: &str = "Measured by the tablet with the clocks of both matched
 /// What the threads tell the window.
 enum Event {
     Ask(String, String, Sender<bool>),
-    Cable(Result<Arc<Cable>, String>, bool), // chosen by the user, or only plugged in
+    Cable(Result<Arc<Cable>, String>, String, bool), // its name; chosen by the user, or only plugged in
 }
 
 struct App {
@@ -36,7 +36,7 @@ struct App {
     settings: Settings,
     session: Option<(Session, String)>,
     cable: Option<Arc<Cable>>,
-    plugged: bool,
+    plugged: Vec<Plug>,
     checked: Instant,
     nearby: Arc<Mutex<HashMap<String, Tablet>>>,
     events: (Sender<Event>, Receiver<Event>),
@@ -116,11 +116,15 @@ fn export(application: &adw::Application, app: &Shared) {
     }
 }
 
-/// The toggle switched on: the tablet on the cable, else the first paired one on the network, else the window.
+/// The toggle switched on: the tablet on the cable, else the first paired one on the network,
+/// else the window. So too with two on the cable: which one is the user's to say.
 fn connect_any(app: &Shared) {
-    let plugged = app.borrow().plugged;
-    if plugged && !paired::all().is_empty() {
-        return over_cable(app, false);
+    let plugged = app.borrow().plugged.clone();
+    if plugged.len() > 1 {
+        return app.borrow().window.present();
+    }
+    if let (Some(plug), false) = (plugged.first(), paired::all().is_empty()) {
+        return over_cable(app, plug, false);
     }
     let found = app.borrow().nearby.lock().unwrap().values().find(|t| paired::by_id(&t.id).is_some()).cloned();
     match found {
@@ -244,7 +248,7 @@ fn build(application: &adw::Application) -> Shared {
     window.set_content(Some(&toolbar));
 
     let app: Shared = Rc::new(RefCell::new(App {
-        window: window.clone(), settings, session: None, cable: None, plugged: false, checked: Instant::now() - Duration::from_secs(9),
+        window: window.clone(), settings, session: None, cable: None, plugged: Vec::new(), checked: Instant::now() - Duration::from_secs(9),
         nearby: nearby::browse(), events: channel(), busy: None, status, devices, rows: Vec::new(), shown: String::new(),
         stats, resolution: resolution.clone(), resolutions: Vec::new(), bus: None, announced: (false, String::new()),
     }));
@@ -354,8 +358,8 @@ fn actions(app: &Shared) -> Vec<Action> {
                              run: Box::new(disconnect) }];
     }
     let paired = paired::all();
-    let by_cable = a.plugged && a.settings.connection != "wifi";
-    let by_wifi = a.settings.connection == "wifi" || (a.settings.connection == "auto" && !a.plugged);
+    let by_cable = !a.plugged.is_empty() && a.settings.connection != "wifi";
+    let by_wifi = a.settings.connection == "wifi" || (a.settings.connection == "auto" && a.plugged.is_empty());
     let mut found = Vec::new();
     let mut tablets: Vec<Tablet> = a.nearby.lock().unwrap().values().cloned().collect();
     tablets.sort_by_key(|t| t.name.to_lowercase());
@@ -377,8 +381,10 @@ fn actions(app: &Shared) -> Vec<Action> {
         }
     }
     if by_cable {
-        found.push(Action { device: "Tablet on the cable".into(), detail: "USB-C cable", label: "Connect", primary: true,
-                            run: Box::new(|app| over_cable(app, true)) });
+        for plug in a.plugged.clone() {
+            found.push(Action { device: cable::shown(&plug, &a.plugged), detail: "USB-C cable", label: "Connect", primary: true,
+                                run: Box::new(move |app| over_cable(app, &plug, true)) });
+        }
     }
     // A paired tablet nowhere to be seen, whose own Wi-Fi Direct group this PC knows.
     if by_wifi {
@@ -427,15 +433,20 @@ fn asker(app: &Shared) -> Asker {
     })
 }
 
-fn over_cable(app: &Shared, chosen: bool) {
+fn over_cable(app: &Shared, plug: &Plug, chosen: bool) {
+    let name = cable::shown(plug, &app.borrow().plugged);
     let open = app.borrow().cable.clone().filter(|c| c.alive());
     if let Some(cable) = open {
-        return show(app, Path::Cable(cable), "the tablet on the cable".into(), chosen);
+        if cable.serial == plug.serial {
+            return show(app, Path::Cable(cable), name, chosen);
+        }
+        cable.close(); // one tablet at a time: the other one is let go
     }
     let tx = app.borrow().events.0.clone();
     app.borrow_mut().busy = Some("Opening the link over the cable… (allow Screenlet on the tablet)".into());
+    let serial = plug.serial.clone();
     std::thread::spawn(move || {
-        let _ = tx.send(Event::Cable(Cable::open().map_err(|e| e.to_string()), chosen));
+        let _ = tx.send(Event::Cable(Cable::open(Some(&serial)).map_err(|e| e.to_string()), name, chosen));
     });
 }
 
@@ -477,12 +488,12 @@ fn tick(app: &Shared) {
                 });
                 dialog.present(Some(&app.borrow().window));
             }
-            Event::Cable(result, chosen) => {
+            Event::Cable(result, name, chosen) => {
                 app.borrow_mut().busy = None;
                 match result {
                     Ok(cable) => {
                         app.borrow_mut().cable = Some(cable.clone());
-                        show(app, Path::Cable(cable), "the tablet on the cable".into(), chosen);
+                        show(app, Path::Cable(cable), name, chosen);
                     }
                     Err(e) => alert(app, "Screenlet could not use the cable", &e),
                 }
@@ -491,15 +502,16 @@ fn tick(app: &Shared) {
     }
     // The cable, looked at every second: there is no notification for it here.
     if app.borrow().checked.elapsed() >= Duration::from_secs(1) {
-        let now = app.borrow().cable.as_ref().is_some_and(|c| c.alive()) || cable::present();
-        let was = std::mem::replace(&mut app.borrow_mut().plugged, now);
+        let now = cable::plugged();
+        let was = std::mem::replace(&mut app.borrow_mut().plugged, now.clone());
         app.borrow_mut().checked = Instant::now();
         let a = app.borrow();
-        let start = now && !was && a.settings.auto_start && a.settings.connection != "wifi" && a.session.is_none()
+        // Two to choose from: that is the user's to say.
+        let start = now.len() == 1 && was.is_empty() && a.settings.auto_start && a.settings.connection != "wifi" && a.session.is_none()
             && a.busy.is_none() && !paired::all().is_empty();
         drop(a);
         if start {
-            over_cable(app, false); // plugged in: the desktop goes to it by itself
+            over_cable(app, &now[0], false); // plugged in: the desktop goes to it by itself
         }
     }
     // The session.
@@ -532,7 +544,7 @@ fn tick(app: &Shared) {
     } else if let Some(busy) = app.borrow().busy.clone() {
         app.borrow().status.set_label(&busy);
     } else if app.borrow().status.label().starts_with("No tablet") || app.borrow().status.label() == "A tablet is ready" {
-        let any = !app.borrow().nearby.lock().unwrap().is_empty() || app.borrow().plugged;
+        let any = !app.borrow().nearby.lock().unwrap().is_empty() || !app.borrow().plugged.is_empty();
         app.borrow().status.set_label(if any { "A tablet is ready" } else { "No tablet with Screenlet open" });
     }
     show_report(app, report);

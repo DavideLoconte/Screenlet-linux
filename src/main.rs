@@ -23,7 +23,9 @@ screenlet --show-wifi SECONDS [OPTIONS]    or on the first paired tablet on the 
                                    with the latency logged stage by stage every 2 s
     options: mirror (the first monitor), h264 or hevc, latency, balanced or clarity,
              30, 60, 90 or 120 (Hz; the tablet's otherwise), native, WxH, small or large
-             (packets), pattern (a test pattern instead of the desktop)
+             (packets), pattern (a test pattern instead of the desktop), serial=SERIAL
+             (which tablet on the cable, as --tablets lists them; the first otherwise)
+screenlet --tablets                the tablets on the cable
 screenlet --pair-cable | --pair-wifi       pair, comparing the code here and on the tablet
 screenlet --bench SECONDS [mirror]         this PC's part alone: the test pattern (or, with
                                    mirror, the first monitor through Mutter) encoded,
@@ -34,6 +36,12 @@ fn main() {
     let result = match args.get(1).map(String::as_str) {
         None | Some("--background") => {
             ui::run(args.get(1).is_some());
+            Ok(())
+        }
+        Some("--tablets") => {
+            for plug in cable::plugged() {
+                println!("{} on the cable, serial={}", plug.name, plug.serial);
+            }
             Ok(())
         }
         Some("--show-cable") | Some("--show-wifi") => show(&args),
@@ -66,8 +74,10 @@ fn show(args: &[String]) -> link::Result<()> {
     let seconds: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
     let mut mode = Mode::default();
     let mut pattern = false;
+    let mut serial = None;
     for word in args.iter().skip(3) {
         match word.as_str() {
+            on if on.starts_with("serial=") => serial = Some(on["serial=".len()..].to_string()),
             "mirror" => mode.mirror = mutter::monitors()?.1.into_iter().find(|m| !m.connector.starts_with("Meta-")).map(|m| m.connector),
             "h264" => mode.codec = "avc".into(),
             "hevc" => mode.codec = "hevc".into(),
@@ -80,7 +90,7 @@ fn show(args: &[String]) -> link::Result<()> {
         }
     }
     session::STATS_EVERY.store(2, std::sync::atomic::Ordering::Relaxed);
-    let path = if args[1] == "--show-cable" { Path::Cable(cable::Cable::open()?) } else { first_paired(Duration::from_secs(10))? };
+    let path = if args[1] == "--show-cable" { Path::Cable(cable::Cable::open(serial.as_deref())?) } else { first_paired(Duration::from_secs(10))? };
     let session = Session::start(path, mode, pattern, None);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     while Instant::now() < deadline && !session.ended() {
@@ -98,7 +108,7 @@ fn show(args: &[String]) -> link::Result<()> {
 }
 
 fn pair(over_cable: bool) -> link::Result<()> {
-    let path = if over_cable { Path::Cable(cable::Cable::open()?) } else {
+    let path = if over_cable { Path::Cable(cable::Cable::open(None)?) } else {
         let found = nearby::browse();
         std::thread::sleep(Duration::from_secs(3));
         let tablets = found.lock().unwrap();

@@ -28,9 +28,11 @@ const IDENTITY: [&str; 6] = ["Screenlet", "Screenlet", "Screenlet on the PC", "1
 
 const GOOGLE: u16 = 0x18D1;
 /// Android tablets' makers: Samsung, Google, Lenovo, Xiaomi, OnePlus, Motorola,
-/// Huawei, OPPO/realme, Honor, Amazon, Asus, Sony, TCL, Nothing.
-pub const ANDROID_VENDORS: [u16; 14] = [0x04E8, 0x18D1, 0x17EF, 0x2717, 0x2A70, 0x22B8, 0x12D1, 0x22D9,
-                                        0x339B, 0x1949, 0x0B05, 0x0FCE, 0x1BBB, 0x2B0E];
+/// Huawei, OPPO/realme, Honor, Amazon, Asus, Sony, TCL, Nothing. Then the chips' makers,
+/// whose ids smaller brands keep (a Bigme is MediaTek's): MediaTek, Qualcomm, Unisoc, Rockchip.
+pub const ANDROID_VENDORS: [u16; 18] = [0x04E8, 0x18D1, 0x17EF, 0x2717, 0x2A70, 0x22B8, 0x12D1, 0x22D9,
+                                        0x339B, 0x1949, 0x0B05, 0x0FCE, 0x1BBB, 0x2B0E,
+                                        0x0E8D, 0x05C6, 0x1782, 0x2207];
 
 fn is_accessory(vendor: u16, product: u16) -> bool {
     vendor == GOOGLE && (0x2D00..=0x2D05).contains(&product)
@@ -76,13 +78,44 @@ fn android<T: UsbContext>(device: &rusb::Device<T>) -> bool {
         .any(|d| NOT_A_TABLET.contains(&d.class_code()))
 }
 
-/// Whether an Android tablet, or one already in accessory mode, is plugged in.
-pub fn present() -> bool {
-    rusb::devices().map(|list| list.iter().any(|d| android(&d) || d.device_descriptor()
-        .map(|dd| is_accessory(dd.vendor_id(), dd.product_id())).unwrap_or(false))).unwrap_or(false)
+/// A tablet on the cable, whatever it shows itself as for now.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Plug {
+    pub serial: String, // the same as an accessory
+    pub name: String,
+}
+
+/// A file of the device's in sysfs: readable without opening it, by anyone.
+fn attribute<T: UsbContext>(device: &rusb::Device<T>, name: &str) -> Option<String> {
+    let ports: Vec<String> = device.port_numbers().ok()?.iter().map(u8::to_string).collect();
+    let text = std::fs::read_to_string(format!("/sys/bus/usb/devices/{}-{}/{name}", device.bus_number(), ports.join("."))).ok()?;
+    Some(text.trim().to_string())
+}
+
+/// Which tablet it is: its serial, or with none the port it is on.
+fn serial<T: UsbContext>(device: &rusb::Device<T>) -> String {
+    attribute(device, "serial").unwrap_or_else(|| format!("{}-{}", device.bus_number(), device.port_number()))
+}
+
+/// The Android tablets plugged in, and those already in accessory mode.
+pub fn plugged() -> Vec<Plug> {
+    let Ok(list) = rusb::devices() else { return Vec::new() };
+    let tablets = list.iter().filter(|d| android(d) || d.device_descriptor()
+        .map(|dd| is_accessory(dd.vendor_id(), dd.product_id())).unwrap_or(false));
+    let mut plugs: Vec<Plug> = tablets.map(|d| Plug { serial: serial(&d), name: attribute(&d, "product").unwrap_or_default() }).collect();
+    plugs.sort_by(|a, b| (&a.name, &a.serial).cmp(&(&b.name, &b.serial)));
+    plugs
+}
+
+/// What the window calls a tablet on the cable: with two of a kind, a bit of their serials too.
+pub fn shown(plug: &Plug, plugs: &[Plug]) -> String {
+    let name = if plug.name.is_empty() { "Tablet on the cable" } else { &plug.name };
+    if plugs.iter().filter(|p| p.name == plug.name).count() < 2 { return name.to_string(); }
+    format!("{name} ({})", &plug.serial[plug.serial.len().saturating_sub(4)..])
 }
 
 pub struct Cable {
+    pub serial: String,
     handle: DeviceHandle<Context>,
     out: u8,
     packet: usize,
@@ -95,11 +128,15 @@ pub struct Cable {
 }
 
 impl Cable {
-    /// Switches the tablet to accessory mode, opens it and waits for the app's
-    /// HELLO (the first time, Android asks its user). Blocks.
-    pub fn open() -> Result<Arc<Cable>> {
+    /// Switches this tablet (none: the first on the cable) to accessory mode, opens it and
+    /// waits for the app's HELLO (the first time, Android asks its user). Blocks.
+    pub fn open(chosen: Option<&str>) -> Result<Arc<Cable>> {
+        let wanted = match chosen {
+            Some(wanted) => wanted.to_string(),
+            None => plugged().into_iter().next().ok_or("no tablet on the cable")?.serial,
+        };
         let context = Context::new()?;
-        let accessory = |context: &Context| context.devices().ok()?.iter().find(|d| d.device_descriptor()
+        let accessory = |context: &Context| context.devices().ok()?.iter().find(|d| serial(d) == wanted && d.device_descriptor()
             .map(|dd| is_accessory(dd.vendor_id(), dd.product_id())).unwrap_or(false));
         if let Some(device) = accessory(&context) {
             // Still an accessory from an earlier session, maybe mid-frame: a reset starts both ends clean.
@@ -109,7 +146,7 @@ impl Cable {
             std::thread::sleep(Duration::from_millis(500));
         }
         if accessory(&context).is_none() {
-            let device = context.devices()?.iter().find(android).ok_or("no tablet on the cable")?;
+            let device = context.devices()?.iter().find(|d| android(d) && serial(d) == wanted).ok_or("no tablet on the cable")?;
             let handle = device.open().map_err(|e| format!("the tablet's USB: {e} (is the udev rule installed?)"))?;
             let timeout = Duration::from_secs(2);
             let mut version = [0u8; 2];
@@ -157,7 +194,7 @@ impl Cable {
             return Err("the accessory has no bulk endpoints".into());
         }
         let cable = Arc::new(Cable {
-            handle, out, packet, writing: Mutex::new(()), streams: Mutex::new(HashMap::new()), next: Mutex::new(0),
+            serial: wanted, handle, out, packet, writing: Mutex::new(()), streams: Mutex::new(HashMap::new()), next: Mutex::new(0),
             running: AtomicBool::new(true), on_datagram: Mutex::new(None),
         });
         // HELLO until the app reads it (Android asks its user the first time), then its answer.
